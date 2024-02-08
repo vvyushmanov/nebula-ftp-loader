@@ -1,0 +1,84 @@
+stages:
+  - artifacts
+  - release
+
+windows_bin:
+  stage: artifacts
+  rules:
+    - if: $CI_COMMIT_TAG =~ /[0-9]+\.[0-9]+\.[0-9]+/ || $TEST_BUILD == "true"
+  script:
+    - echo "Creating Windows artifact"
+    - mv ./dist/Windows/T.Nebula/ ./T.Nebula/
+    - echo "WIN_JOB=${CI_JOB_ID}" >> build.env
+  artifacts:
+    name: "t.nebula-win_x64-$CI_COMMIT_REF_NAME-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - "./T.Nebula/*"
+    reports:
+      dotenv: build.env
+macos_bin:
+  stage: artifacts
+  tags:
+    - macos
+  rules:
+    - if: $CI_COMMIT_TAG =~ /[0-9]+\.[0-9]+\.[0-9]+/ || $TEST_BUILD == "true"
+  script:
+    - echo "Creating MacOS artifact"
+    - python3 -m PyInstaller --onefile --clean --add-binary adb/adb-mac:adb main.py --distpath dist/macOS -n T.Nebula --noconfirm --add-data T-chan.png:. --add-data t-nebula.gif:. --icon t-nebula.ico --windowed --clean
+    - create-dmg --background t-chan-installer_nobg.png --volname 'T.Nebula Installer' --window-pos 200 120 --window-size 800 400 --icon-size 100 --hide-extension T.Nebula.app --app-drop-link 600 185 --icon T.Nebula.app 200 190 dist/macOS/T.Nebula-Installer.dmg dist/macOS/T.Nebula.app
+    - mv ./dist/macOS/ ./T.Nebula/
+    - echo "MAC_JOB=${CI_JOB_ID}" >> build.env
+  artifacts:
+    name: "t.nebula-macos_intel-$CI_COMMIT_REF_NAME-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - "./T.Nebula/*"
+    reports:
+      dotenv: build.env
+deb_bin:
+  stage: artifacts
+  image: python:slim
+  rules:
+    - if: $CI_COMMIT_TAG =~ /[0-9]+\.[0-9]+\.[0-9]+/ || $TEST_BUILD == "true"
+  script:
+    - echo "Creating Linux artifact"
+    - python3 -m pip install pyinstaller
+    - python3 -m pip install -r requirements.txt
+    - apt update && apt install binutils python3-tk -y
+    - python3 -m PyInstaller --onefile --add-binary adb/adb-linux:adb main.py --distpath . -n t.nebula-linux --add-data T-chan.png:. --add-data t-nebula.gif:. --clean --hidden-import='PIL._tkinter_finder'
+    - echo "LINUX_JOB=${CI_JOB_ID}" >> build.env
+  artifacts:
+    name: "t.nebula-deb-amd64-$CI_COMMIT_REF_NAME-$CI_COMMIT_SHORT_SHA"
+    paths:
+      - "./t.nebula-linux"
+    reports:
+      dotenv: build.env
+
+release_job:
+  stage: release
+  needs:
+    - job: windows_bin
+      artifacts: true
+    - job: deb_bin
+      artifacts: true
+    - job: macos_bin
+      artifacts: true
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG =~ /[0-9]+\.[0-9]+\.[0-9]+/            # Run this job when a tag is created
+  script:
+    - echo "running release_job"
+  release:                               # See https://docs.gitlab.com/ee/ci/yaml/#release for available properties
+    tag_name: '$CI_COMMIT_TAG'
+    name: 'v$CI_COMMIT_TAG'
+    description: '## T.Nebula v$CI_COMMIT_TAG'
+    assets:
+      links:
+        - name: "T.Nebula Windows v$CI_COMMIT_TAG"
+          url: '${CI_PROJECT_URL}/-/jobs/${WIN_JOB}/artifacts/download'
+          link_type: package
+        - name: "T.Nebula Linux (deb) v$CI_COMMIT_TAG"
+          url: '${CI_PROJECT_URL}/-/jobs/${LINUX_JOB}/artifacts/download'
+          link_type: package
+        - name: "T.Nebula MacOS (intel) v$CI_COMMIT_TAG"
+          url: '${CI_PROJECT_URL}/-/jobs/${MAC_JOB}/artifacts/download'
+          link_type: package

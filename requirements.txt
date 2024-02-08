@@ -1,0 +1,4 @@
+pre-commit
+Pillow~=10.1.0
+
+pytest~=7.4.3

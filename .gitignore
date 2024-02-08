@@ -1,0 +1,13 @@
+/.idea/
+**/ftps_password.json
+**/TS
+**/TG
+/build
+/tests
+*.spec
+__pycache__/
+/ftps_password.json
+/TS
+/TG
+*pycache*
+dist/macOS
